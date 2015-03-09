@@ -37,6 +37,32 @@ describe Cielo::Transaction do
     end
   end
 
+  describe "create a buy page store transaction with token and soft-descriptor" do
+    before do
+      Cielo.stub(:numero_afiliacao).and_return('1006993069')
+      Cielo.stub(:chave_acesso).and_return('25fbb99741c739dd84d7b06ec78c9bac718838630f30b112d033ce2e621b34f3')
+
+      FakeWeb.register_uri(:any, "https://qasecommerce.cielo.com.br/servicos/ecommwsec.do",
+        :body => "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><retorno-token versao=\"1.2.1\" id=\"57239017\" xmlns=\"http://ecommerce.cbmp.com.br\"><token><dados-token><codigo-token>TuS6LeBHWjqFFtE7S3zR052Jl/KUlD+tYJFpAdlA87E=</codigo-token><status>1</status><numero-cartao-truncado>455187******0183</numero-cartao-truncado></dados-token></token></retorno-token>", :content_type => "application/xml")
+
+      response = @token.create! card_token_params, :store
+      token = response[:"retorno-token"][:token][:"dados-token"][:"codigo-token"]
+
+      @params = default_params.merge(:token => token, :autorizar => 3, :"soft-descriptor" => "LOJINHASALIM")
+    end
+
+    it 'delivers an successful message with soft-descriptor' do
+      FakeWeb.register_uri(:any, "https://qasecommerce.cielo.com.br/servicos/ecommwsec.do",
+        :body => "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><transacao versao=\"1.2.1\" id=\"1385758302\" xmlns=\"http://ecommerce.cbmp.com.br\"><tid>10069930690BB0381001</tid><pan>52WC7RsmcNuEUSjrYWAEhCOjoLMnMCm4KMTQBqN7PdM=</pan><dados-pedido><numero>1</numero><valor>100</valor><moeda>986</moeda><data-hora>2013-11-29T18:51:43.854-02:00</data-hora><idioma>PT</idioma><taxa-embarque>0</taxa-embarque><soft-descriptor>LOJINHASALIM</soft-descriptor></dados-pedido><forma-pagamento><bandeira>visa</bandeira><produto>1</produto><parcelas>1</parcelas></forma-pagamento><status>6</status><autenticacao><codigo>6</codigo><mensagem>Transacao sem autenticacao</mensagem><data-hora>2013-11-29T18:51:43.865-02:00</data-hora><valor>100</valor><eci>7</eci></autenticacao><autorizacao><codigo>6</codigo><mensagem>Transa??o autorizada</mensagem><data-hora>2013-11-29T18:51:43.869-02:00</data-hora><valor>100</valor><lr>00</lr><arp>123456</arp><nsu>766008</nsu></autorizacao><captura><codigo>6</codigo><mensagem>Transacao capturada com sucesso</mensagem><data-hora>2013-11-29T18:51:44.006-02:00</data-hora><valor>100</valor></captura></transacao>", :content_type => "application/xml")
+
+      response = @transaction.create! @params, :store
+
+      # 7 is when transactions was not autenticated
+      response[:transacao][:autenticacao][:eci].should eq("7")
+      response[:transacao][:"dados-pedido"][:"soft-descriptor"].should eq("LOJINHASALIM")
+    end
+  end
+
   describe "create a recurring transaction with token" do
     before do
       Cielo.stub(:numero_afiliacao).and_return('1006993069')
